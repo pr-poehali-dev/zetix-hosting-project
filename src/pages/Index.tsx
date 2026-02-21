@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Icon from "@/components/ui/icon";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const DOLPHIN_URL = "https://cdn.poehali.dev/projects/dd998167-bb93-472a-9cea-24032a9ccac4/files/cd1e4089-fff7-4e64-848a-9f6163ba51aa.jpg";
+const DOLPHIN_URL = "https://cdn.poehali.dev/projects/dd998167-bb93-472a-9cea-24032a9ccac4/bucket/60e5fcdd-090a-4eb1-92e1-a016cfdeb55a.png";
 const SECRET_PROMO = "ADMINMENULOGIN123";
 const MAX_SERVERS = 5;
 
@@ -272,8 +272,11 @@ function PlanCard({ plan, onBuy }: { plan: PlanAny; onBuy: (p: PlanAny) => void 
       </div>
       <div className="p-5 flex flex-col gap-3 flex-1">
         <div className="flex items-center justify-between">
-          <span className="font-bold text-white">{plan.id}</span>
           <div>
+            <span className="font-bold text-white block">{plan.id}</span>
+            <span className="text-xs" style={{ color: "var(--z-muted)" }}>{isVds ? "🇩🇪 Германия" : "🇷🇺 Россия"}</span>
+          </div>
+          <div className="text-right">
             <span className="text-xl font-bold text-white">{(plan.price as number).toLocaleString("ru-RU")}₽</span>
             <span className="text-xs ml-1" style={{ color: "var(--z-muted)" }}>/мес.</span>
           </div>
