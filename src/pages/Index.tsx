@@ -520,8 +520,8 @@ function AdminLogsPanel({ onConfirmPurchase }: { onConfirmPurchase: (id: string,
 }
 
 // ─── Profile Page ─────────────────────────────────────────────────────────────
-function ProfilePage({ user, setUser, onBack, onConfirmPurchase }: {
-  user: UserState; setUser: (u: UserState) => void; onBack: () => void; onConfirmPurchase: (id: string, plan: PlanAny) => void;
+function ProfilePage({ user, setUser, onBack, onConfirmPurchase, onLogout }: {
+  user: UserState; setUser: (u: UserState) => void; onBack: () => void; onConfirmPurchase: (id: string, plan: PlanAny) => void; onLogout: () => void;
 }) {
   const [promo, setPromo] = useState("");
   const [promoMsg, setPromoMsg] = useState<"" | "success" | "error">("");
@@ -646,6 +646,14 @@ function ProfilePage({ user, setUser, onBack, onConfirmPurchase }: {
 
         {/* Admin logs */}
         {user.isAdmin && <AdminLogsPanel onConfirmPurchase={onConfirmPurchase} />}
+
+        {/* Logout */}
+        <div className="mt-4">
+          <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium transition-all hover:bg-red-500/10"
+            style={{ border: "1px solid rgba(239,68,68,0.3)", color: "#ef4444" }}>
+            <Icon name="LogOut" size={14} /> Выйти из аккаунта
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1120,11 +1128,23 @@ function AuthPage({ mode, setMode, onBack, onSuccess }: {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (mode === "register" && form.password !== form.confirm) { setError("Пароли не совпадают"); return; }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 800));
+    await new Promise(r => setTimeout(r, 600));
     setLoading(false);
-    onSuccess({ name: form.name || form.email.split("@")[0], email: form.email, password: form.password, balance: 0, isAdmin: false, servers: [] });
+    const accounts = getAccounts();
+    const key = form.email.toLowerCase();
+    if (mode === "register") {
+      if (form.password !== form.confirm) { setError("Пароли не совпадают"); return; }
+      if (accounts[key]) { setError("Аккаунт с таким email уже существует"); return; }
+      const u: UserState = { name: form.name || form.email.split("@")[0], email: form.email, password: form.password, balance: 0, isAdmin: false, servers: [] };
+      saveAccount(u);
+      onSuccess(u);
+    } else {
+      const found = accounts[key];
+      if (!found) { setError("Аккаунт не найден"); return; }
+      if (found.password !== form.password) { setError("Неверный пароль"); return; }
+      onSuccess(found);
+    }
   };
 
   return (
@@ -1192,11 +1212,32 @@ function Footer() {
   );
 }
 
+// ─── Account Storage ──────────────────────────────────────────────────────────
+const STORAGE_KEY = "zetix_accounts";
+const SESSION_KEY = "zetix_session";
+function getAccounts(): Record<string, UserState> {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch { return {}; }
+}
+function saveAccount(u: UserState) {
+  const all = getAccounts(); all[u.email.toLowerCase()] = u;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+}
+function getSession(): UserState | null {
+  try { const s = sessionStorage.getItem(SESSION_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
+}
+
 // ─── Root ─────────────────────────────────────────────────────────────────────
 export default function Index() {
   const [page, setPage] = useState<Page>("home");
   const [authMode, setAuthMode] = useState<AuthMode>("register");
-  const [user, setUser] = useState<UserState | null>(null);
+  const [user, setUser] = useState<UserState | null>(() => {
+    const session = getSession();
+    if (session) {
+      const fresh = getAccounts()[session.email.toLowerCase()];
+      return fresh || session;
+    }
+    return null;
+  });
   const [buyingPlan, setBuyingPlan] = useState<PlanAny | null>(null);
   const [activePanelServer, setActivePanelServer] = useState<ServerInfo | null>(null);
   const [panelView, setPanelView] = useState<"list" | "server">("list");
@@ -1229,7 +1270,17 @@ export default function Index() {
     pushAdminLog({ time: nowStr(), msg: `Сервер ${plan.id} активирован для ${user.email} (порт ${port})`, type: "info" });
   };
 
+  useEffect(() => {
+    if (user) {
+      saveAccount(user);
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(user));
+    } else {
+      sessionStorage.removeItem(SESSION_KEY);
+    }
+  }, [user]);
+
   const handleAuthSuccess = (u: UserState) => { setUser(u); setPage("home"); };
+  const handleLogout = () => { setUser(null); setPage("home"); };
 
   useBalanceTopup(({ email, amount }) => {
     setUser(prev => {
@@ -1248,7 +1299,7 @@ export default function Index() {
   }
 
   if (page === "profile" && user) {
-    return <ProfilePage user={user} setUser={setUser} onBack={() => setPage("home")} onConfirmPurchase={handleConfirmPurchase} />;
+    return <ProfilePage user={user} setUser={setUser} onBack={() => setPage("home")} onConfirmPurchase={handleConfirmPurchase} onLogout={handleLogout} />;
   }
 
   if (page === "auth") {
