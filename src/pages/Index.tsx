@@ -105,6 +105,20 @@ function useAdminLogs() {
   return adminLogs;
 }
 
+// ─── Global Balance Top-up Store (admin → user) ────────────────────────────
+type BalanceTopupEvent = { email: string; amount: number };
+let balanceTopupListeners: ((e: BalanceTopupEvent) => void)[] = [];
+function triggerBalanceTopup(e: BalanceTopupEvent) { balanceTopupListeners.forEach(fn => fn(e)); }
+function useBalanceTopup(callback: (e: BalanceTopupEvent) => void) {
+  const cb = useRef(callback);
+  cb.current = callback;
+  useEffect(() => {
+    const fn = (e: BalanceTopupEvent) => cb.current(e);
+    balanceTopupListeners.push(fn);
+    return () => { balanceTopupListeners = balanceTopupListeners.filter(f => f !== fn); };
+  }, []);
+}
+
 // ─── Monitoring Hook ──────────────────────────────────────────────────────────
 function useMonitoring(status: ServerStatus) {
   const [cpu, setCpu] = useState(0);
@@ -338,24 +352,21 @@ function ServicesSection({ onBuy }: { onBuy: (p: PlanAny) => void }) {
 }
 
 // ─── Buy Modal ────────────────────────────────────────────────────────────────
-function BuyModal({ plan, user, onClose, onPending }: {
-  plan: PlanAny; user: UserState; onClose: () => void; onPending: (id: string) => void;
+function BuyModal({ plan, user, onClose, onBuy }: {
+  plan: PlanAny; user: UserState; onClose: () => void; onBuy: () => void;
 }) {
   const [method, setMethod] = useState<PayMethod>("card");
   const [card, setCard] = useState(""); const [cardName, setCardName] = useState(""); const [expiry, setExpiry] = useState(""); const [cvv, setCvv] = useState("");
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState<"form" | "pending">("form");
-  const [purchaseId] = useState(() => randId());
 
   const handleExpiry = (v: string) => { const d = v.replace(/\D/g,"").slice(0,4); setExpiry(d.length > 2 ? d.slice(0,2)+"/"+d.slice(2) : d); };
 
   const submitPayment = async () => {
     setLoading(true);
-    await new Promise(r => setTimeout(r, 1200));
+    await new Promise(r => setTimeout(r, 900));
     setLoading(false);
-    setStep("pending");
-    pushAdminLog({ time: nowStr(), msg: `Новая покупка от ${user.email}: тариф ${plan.id} — ${plan.price}₽`, type: "purchase", purchaseId, purchasePlan: plan });
-    onPending(purchaseId);
+    pushAdminLog({ time: nowStr(), msg: `Покупка: ${user.email} оплатил тариф ${plan.id} — ${plan.price}₽`, type: "purchase", purchaseId: randId(), purchasePlan: plan });
+    onBuy();
   };
 
   const payMethods: { key: PayMethod; label: string; icon: string }[] = [
@@ -364,29 +375,6 @@ function BuyModal({ plan, user, onClose, onPending }: {
     { key: "sber", label: "Сбербанк", icon: "Building" },
     { key: "sberkids", label: "СберКидс", icon: "Star" },
   ];
-
-  if (step === "pending") {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(10px)" }}>
-        <div className="z-card p-8 max-w-md w-full text-center">
-          <div className="w-16 h-16 rounded-full mx-auto mb-5 flex items-center justify-center animate-pulse"
-            style={{ background: "rgba(245,158,11,0.15)", border: "2px solid #f59e0b" }}>
-            <Icon name="Clock" size={28} style={{ color: "#f59e0b" }} />
-          </div>
-          <h3 className="text-xl font-bold text-white mb-2">Ожидание подтверждения</h3>
-          <p className="text-sm mb-4" style={{ color: "var(--z-muted)" }}>
-            Заявка отправлена администратору. После подтверждения сервер будет активирован автоматически.
-          </p>
-          <div className="p-3 rounded-xl mb-4 text-sm" style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)" }}>
-            <p style={{ color: "#f59e0b" }}>ID заявки: <span className="font-mono">{purchaseId}</span></p>
-            <p className="mt-1" style={{ color: "var(--z-muted)" }}>Тариф: <span className="text-white">{plan.id}</span></p>
-          </div>
-          <p className="text-xs mb-4" style={{ color: "var(--z-muted)" }}>Реквизиты: 📞 +7 921 700-61-74 | 💳 2202 2082 8801 8451</p>
-          <button onClick={onClose} className="z-btn-outline px-6 py-2 text-sm w-full justify-center">Закрыть</button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(10px)" }}>
@@ -419,7 +407,7 @@ function BuyModal({ plan, user, onClose, onPending }: {
             </p>
             <p className="mt-2" style={{ color: "var(--z-muted)" }}>Сумма: <span className="text-white font-bold">{(plan.price as number).toLocaleString("ru-RU")}₽</span></p>
             <button onClick={submitPayment} disabled={loading} className="z-btn-primary w-full py-3 justify-center text-sm mt-4">
-              {loading ? <><Icon name="Loader2" size={14} className="animate-spin" /> Обработка...</> : "Оплатил, жду подтверждения"}
+              {loading ? <><Icon name="Loader2" size={14} className="animate-spin" /> Обработка...</> : <><Icon name="Zap" size={14} /> Оплатить</>}
             </button>
           </div>
         ) : (
@@ -460,12 +448,26 @@ function BuyModal({ plan, user, onClose, onPending }: {
 function AdminLogsPanel({ onConfirmPurchase }: { onConfirmPurchase: (id: string, plan: PlanAny) => void }) {
   const logs = useAdminLogs();
   const [confirmed, setConfirmed] = useState<Set<string>>(new Set());
+  const [topupEmail, setTopupEmail] = useState("");
+  const [topupAmt, setTopupAmt] = useState("");
+  const [topupMsg, setTopupMsg] = useState<"" | "sent">("") ;
 
   const handleConfirm = (log: AdminLog) => {
     if (!log.purchaseId || !log.purchasePlan) return;
     setConfirmed(prev => new Set([...prev, log.purchaseId!]));
     onConfirmPurchase(log.purchaseId!, log.purchasePlan!);
     pushAdminLog({ time: nowStr(), msg: `✅ Покупка ${log.purchaseId} подтверждена — сервер активирован`, type: "info" });
+  };
+
+  const handleTopup = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = parseInt(topupAmt);
+    if (!topupEmail.trim() || !amt || amt < 1) return;
+    triggerBalanceTopup({ email: topupEmail.trim(), amount: amt });
+    pushAdminLog({ time: nowStr(), msg: `💰 Баланс пополнен: ${topupEmail.trim()} +${amt}₽ (admin)`, type: "info" });
+    setTopupMsg("sent");
+    setTopupEmail(""); setTopupAmt("");
+    setTimeout(() => setTopupMsg(""), 3000);
   };
 
   return (
@@ -475,6 +477,22 @@ function AdminLogsPanel({ onConfirmPurchase }: { onConfirmPurchase: (id: string,
         <h4 className="font-bold text-white text-sm">Логи системы (реальное время)</h4>
         <span className="ml-auto text-xs px-2 py-0.5 rounded-full" style={{ background: "rgba(34,197,94,0.1)", color: "#22c55e" }}>Live</span>
       </div>
+
+      {/* Admin balance top-up */}
+      <div className="mb-4 p-3 rounded-xl" style={{ background: "rgba(0,180,255,0.06)", border: "1px solid rgba(0,180,255,0.15)" }}>
+        <p className="text-xs font-bold mb-2" style={{ color: "var(--z-blue)" }}>Пополнить баланс пользователю</p>
+        <form onSubmit={handleTopup} className="flex flex-col gap-2">
+          <input className="z-input text-sm py-1.5" placeholder="Email пользователя" value={topupEmail} onChange={e => setTopupEmail(e.target.value)} required />
+          <div className="flex gap-2">
+            <input className="z-input text-sm py-1.5 flex-1" type="number" min="1" placeholder="Сумма ₽" value={topupAmt} onChange={e => setTopupAmt(e.target.value)} required />
+            <button type="submit" className="z-btn-primary px-4 py-1.5 text-xs">
+              <Icon name="Plus" size={12} /> Пополнить
+            </button>
+          </div>
+          {topupMsg === "sent" && <p className="text-xs" style={{ color: "#22c55e" }}>✓ Баланс пополнен в реальном времени</p>}
+        </form>
+      </div>
+
       <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
         {logs.map((log, i) => (
           <div key={i} className="flex flex-col gap-1.5 p-3 rounded-lg"
@@ -508,9 +526,6 @@ function ProfilePage({ user, setUser, onBack, onConfirmPurchase }: {
   const [promo, setPromo] = useState("");
   const [promoMsg, setPromoMsg] = useState<"" | "success" | "error">("");
   const [showPass, setShowPass] = useState(false);
-  const [depositAmt, setDepositAmt] = useState("");
-  const [depositMethod, setDepositMethod] = useState<PayMethod>("card");
-  const [depositStep, setDepositStep] = useState<"form" | "pending" | "done">("form");
 
   const handlePromo = (e: React.FormEvent) => {
     e.preventDefault();
@@ -524,22 +539,7 @@ function ProfilePage({ user, setUser, onBack, onConfirmPurchase }: {
     setPromo("");
   };
 
-  const handleDeposit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const amt = parseInt(depositAmt);
-    if (!amt || amt < 1) return;
-    setDepositStep("pending");
-    pushAdminLog({ time: nowStr(), msg: `Пополнение баланса от ${user.email}: +${amt}₽ (${depositMethod})`, type: "purchase" });
-    await new Promise(r => setTimeout(r, 1000));
-    setDepositStep("done");
-    setUser({ ...user, balance: user.balance + amt });
-    setDepositAmt("");
-  };
 
-  const payMethods: { key: PayMethod; label: string }[] = [
-    { key: "card", label: "Карта" }, { key: "sbp", label: "СБП" },
-    { key: "sber", label: "Сбербанк" }, { key: "sberkids", label: "СберКидс" },
-  ];
 
   return (
     <div className="min-h-screen pt-20 px-6 pb-12" style={{ background: "var(--z-bg)" }}>
@@ -610,41 +610,18 @@ function ProfilePage({ user, setUser, onBack, onConfirmPurchase }: {
           </div>
         </div>
 
-        {/* Deposit */}
+        {/* Deposit via support */}
         <div className="z-card p-6 mb-4">
-          <h3 className="font-bold text-white mb-4 flex items-center gap-2">
-            <Icon name="PlusCircle" size={15} style={{ color: "var(--z-blue)" }} /> Пополнить баланс
+          <h3 className="font-bold text-white mb-2 flex items-center gap-2">
+            <Icon name="Wallet" size={15} style={{ color: "var(--z-blue)" }} /> Пополнить баланс
           </h3>
-          {depositStep === "done" ? (
-            <div className="text-center py-5">
-              <Icon name="CheckCircle" size={36} className="mx-auto mb-3" style={{ color: "#22c55e" }} />
-              <p className="text-white font-semibold">Баланс пополнен!</p>
-              <button onClick={() => setDepositStep("form")} className="mt-3 text-sm" style={{ color: "var(--z-blue)" }}>Пополнить ещё</button>
-            </div>
-          ) : depositStep === "pending" ? (
-            <div className="text-center py-5">
-              <Icon name="Clock" size={36} className="mx-auto mb-3 animate-pulse" style={{ color: "#f59e0b" }} />
-              <p className="text-white font-semibold">Обрабатываем платёж...</p>
-            </div>
-          ) : (
-            <form onSubmit={handleDeposit} className="flex flex-col gap-3">
-              <div className="grid grid-cols-2 gap-2">
-                {payMethods.map(m => (
-                  <button type="button" key={m.key} onClick={() => setDepositMethod(m.key)}
-                    className="px-3 py-2 rounded-xl text-sm font-medium transition-all"
-                    style={depositMethod === m.key
-                      ? { background: "rgba(0,180,255,0.12)", border: "1px solid rgba(0,180,255,0.3)", color: "var(--z-blue)" }
-                      : { background: "var(--z-card2)", border: "1px solid var(--z-border)", color: "var(--z-muted)" }}>
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-              <input className="z-input" type="number" min="1" placeholder="Сумма в рублях" value={depositAmt} onChange={e => setDepositAmt(e.target.value)} required />
-              <button type="submit" className="z-btn-primary py-2.5 justify-center text-sm">
-                <Icon name="PlusCircle" size={13} /> Пополнить
-              </button>
-            </form>
-          )}
+          <p className="text-sm mb-4" style={{ color: "var(--z-muted)" }}>
+            Пополнение баланса доступно только через техническую поддержку. Напишите нам в Telegram — ответим быстро.
+          </p>
+          <a href="https://t.me/HellwayYT" target="_blank" rel="noopener noreferrer"
+            className="z-btn-primary py-2.5 justify-center text-sm flex items-center gap-2 w-full">
+            <Icon name="Send" size={13} /> Написать в поддержку @HellwayYT
+          </a>
         </div>
 
         {/* Promo */}
@@ -1223,7 +1200,7 @@ export default function Index() {
   const [buyingPlan, setBuyingPlan] = useState<PlanAny | null>(null);
   const [activePanelServer, setActivePanelServer] = useState<ServerInfo | null>(null);
   const [panelView, setPanelView] = useState<"list" | "server">("list");
-  const [pendingPurchaseId, setPendingPurchaseId] = useState<string | null>(null);
+
 
   // Global realtime logs
   useEffect(() => {
@@ -1235,28 +1212,31 @@ export default function Index() {
   const handleBuyPlan = (plan: PlanAny) => {
     if (!user) { setAuthMode("register"); setPage("auth"); setBuyingPlan(plan); return; }
     if (user.servers.length >= MAX_SERVERS) { alert(`Максимум ${MAX_SERVERS} серверов на аккаунт`); return; }
+    if (user.balance < (plan.price as number)) { alert(`Недостаточно средств на балансе. Ваш баланс: ${user.balance.toLocaleString("ru-RU")}₽, стоимость тарифа: ${(plan.price as number).toLocaleString("ru-RU")}₽. Пополните баланс через тех. поддержку @HellwayYT в Telegram.`); return; }
     setBuyingPlan(plan);
-  };
-
-  const handlePurchasePending = (id: string) => {
-    setPendingPurchaseId(id);
   };
 
   const handleConfirmPurchase = (id: string, plan: PlanAny) => {
     if (!user) return;
     const port = randPort();
     const newServer: ServerInfo = { plan, port, id, status: "offline" };
-    const updated = { ...user, servers: [...user.servers, newServer] };
+    const updated = { ...user, servers: [...user.servers, newServer], balance: user.balance - (plan.price as number) };
     setUser(updated);
     setActivePanelServer(newServer);
     setPanelView("server");
     setPage("panel");
     setBuyingPlan(null);
-    setPendingPurchaseId(null);
     pushAdminLog({ time: nowStr(), msg: `Сервер ${plan.id} активирован для ${user.email} (порт ${port})`, type: "info" });
   };
 
   const handleAuthSuccess = (u: UserState) => { setUser(u); setPage("home"); };
+
+  useBalanceTopup(({ email, amount }) => {
+    setUser(prev => {
+      if (!prev || prev.email.toLowerCase() !== email.toLowerCase()) return prev;
+      return { ...prev, balance: prev.balance + amount };
+    });
+  });
 
   if (page === "panel") {
     if (panelView === "server" && activePanelServer && user) {
@@ -1289,7 +1269,7 @@ export default function Index() {
       <ServicesSection onBuy={handleBuyPlan} />
       <Footer />
       {buyingPlan && user && (
-        <BuyModal plan={buyingPlan} user={user} onClose={() => setBuyingPlan(null)} onPending={handlePurchasePending} />
+        <BuyModal plan={buyingPlan} user={user} onClose={() => setBuyingPlan(null)} onBuy={() => handleConfirmPurchase(randId(), buyingPlan)} />
       )}
     </div>
   );
