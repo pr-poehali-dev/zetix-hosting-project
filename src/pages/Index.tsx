@@ -9,6 +9,7 @@ const MAX_SERVERS = 5;
 function randPort() { return Math.floor(10000 + Math.random() * 89999); }
 function randId() { return Math.random().toString(36).slice(2, 10); }
 function maskPass(p: string) { return "•".repeat(Math.max(8, p.length)); }
+function genApiKey() { return "zx_" + Array.from({ length: 32 }, () => Math.random().toString(36)[2]).join(""); }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Page = "home" | "auth" | "panel" | "profile";
@@ -20,7 +21,7 @@ type PayMethod = "card" | "sbp" | "sber" | "sberkids";
 
 interface PlanAny { id: string; price: number; cpu: string; ram: string; disk: string; net: string; [k: string]: string | number; }
 interface ServerFile { name: string; type: "file" | "folder"; size?: string; ext?: string; }
-interface ServerInfo { plan: PlanAny; port: number; id: string; status: ServerStatus; }
+interface ServerInfo { plan: PlanAny; port: number; id: string; status: ServerStatus; apiKey?: string; }
 interface AdminLog { time: string; msg: string; type: "info" | "warn" | "purchase"; purchaseId?: string; purchasePlan?: PlanAny; }
 interface CoOwner { email: string; addedAt: string; }
 interface Subdomain { name: string; target: string; created: string; }
@@ -659,6 +660,92 @@ function ProfilePage({ user, setUser, onBack, onConfirmPurchase, onLogout }: {
   );
 }
 
+// ─── Settings Tab ─────────────────────────────────────────────────────────────
+function SettingsTab({ server, user, setUser }: { server: ServerInfo; user: UserState; setUser: (u: UserState) => void }) {
+  const [apiKey, setApiKey] = useState(server.apiKey || "");
+  const [apiCopied, setApiCopied] = useState(false);
+  const [apiVisible, setApiVisible] = useState(false);
+
+  const handleGenerateKey = () => {
+    const key = genApiKey();
+    setApiKey(key);
+    const updatedServers = user.servers.map(s => s.id === server.id ? { ...s, apiKey: key } : s);
+    const updatedUser = { ...user, servers: updatedServers };
+    setUser(updatedUser);
+    saveAccount(updatedUser);
+    pushAdminLog({ time: nowStr(), msg: `🔑 API ключ обновлён для сервера ${server.id} (${user.email})`, type: "info" });
+  };
+
+  const handleCopyKey = () => {
+    if (!apiKey) return;
+    navigator.clipboard.writeText(apiKey);
+    setApiCopied(true);
+    setTimeout(() => setApiCopied(false), 2000);
+  };
+
+  return (
+    <div className="flex-1 overflow-y-auto p-6">
+      <h3 className="font-bold text-white mb-5">Настройки сервера</h3>
+      <div className="p-4 rounded-xl mb-4" style={{ background: "var(--z-card2)", border: "1px solid rgba(0,180,255,0.2)" }}>
+        <p className="text-xs font-semibold text-white mb-2">IP для подключения</p>
+        <div className="flex items-center gap-3 p-3 rounded-lg" style={{ background: "var(--z-card)", border: "1px solid rgba(0,180,255,0.15)" }}>
+          <Icon name="Globe" size={14} style={{ color: "var(--z-blue)" }} />
+          <span className="font-mono text-sm" style={{ color: "var(--z-blue)" }}>msk.zetixhost.me:{server.port}</span>
+          <button onClick={() => navigator.clipboard.writeText(`msk.zetixhost.me:${server.port}`)} className="ml-auto text-xs px-2 py-1 rounded" style={{ color: "var(--z-muted)", border: "1px solid var(--z-border)" }}>
+            <Icon name="Copy" size={11} />
+          </button>
+        </div>
+      </div>
+
+      {/* API Key */}
+      <div className="p-4 rounded-xl mb-4" style={{ background: "var(--z-card2)", border: "1px solid rgba(245,158,11,0.25)" }}>
+        <div className="flex items-center gap-2 mb-3">
+          <Icon name="Key" size={14} style={{ color: "#f59e0b" }} />
+          <p className="text-xs font-bold" style={{ color: "#f59e0b" }}>API ключ</p>
+        </div>
+        {apiKey ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2 p-3 rounded-lg" style={{ background: "var(--z-card)", border: "1px solid rgba(245,158,11,0.2)" }}>
+              <span className="font-mono text-xs flex-1 truncate" style={{ color: "var(--z-text)" }}>
+                {apiVisible ? apiKey : apiKey.slice(0, 8) + "•".repeat(24)}
+              </span>
+              <button onClick={() => setApiVisible(v => !v)} className="text-xs px-2 py-1 rounded" style={{ color: "var(--z-muted)", border: "1px solid var(--z-border)" }}>
+                <Icon name={apiVisible ? "EyeOff" : "Eye"} size={11} />
+              </button>
+              <button onClick={handleCopyKey} className="text-xs px-2 py-1 rounded transition-colors" style={{ color: apiCopied ? "#22c55e" : "var(--z-muted)", border: "1px solid var(--z-border)" }}>
+                <Icon name={apiCopied ? "Check" : "Copy"} size={11} />
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={handleGenerateKey} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all" style={{ background: "rgba(245,158,11,0.1)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.3)" }}>
+                <Icon name="RefreshCw" size={11} /> Перегенерировать
+              </button>
+            </div>
+            <p className="text-xs" style={{ color: "var(--z-muted)" }}>Используй ключ для интеграции со сторонними сервисами и ботами</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p className="text-xs" style={{ color: "var(--z-muted)" }}>API ключ позволяет управлять сервером через сторонние сервисы</p>
+            <button onClick={handleGenerateKey} className="self-start flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all" style={{ background: "rgba(245,158,11,0.12)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.3)" }}>
+              <Icon name="Key" size={12} /> Создать API ключ
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-3">
+        {[["Название","ZetixHost Server"],["MOTD","Welcome!"],["Порт",String(server.port)],["Режим","survival"],["Сложность","normal"],["Макс. игроков","20"]].map(([l,v]) => (
+          <div key={l} className="p-4 rounded-xl" style={{ background: "var(--z-card2)", border: "1px solid var(--z-border)" }}>
+            <label className="text-xs block mb-1.5" style={{ color: "var(--z-muted)" }}>{l}</label>
+            <input className="z-input text-sm py-2" defaultValue={v} />
+          </div>
+        ))}
+      </div>
+      <button className="z-btn-primary mt-5 px-5 py-2.5 text-sm"><Icon name="Save" size={13} />Сохранить</button>
+    </div>
+  );
+}
+
 // ─── Server Panel ─────────────────────────────────────────────────────────────
 function ServerPanel({ server, user, setUser, onBack }: {
   server: ServerInfo; user: UserState; setUser: (u: UserState) => void; onBack: () => void;
@@ -1034,28 +1121,7 @@ function ServerPanel({ server, user, setUser, onBack }: {
 
           {/* SETTINGS */}
           {tab === "settings" && (
-            <div className="flex-1 overflow-y-auto p-6">
-              <h3 className="font-bold text-white mb-5">Настройки сервера</h3>
-              <div className="p-4 rounded-xl mb-4" style={{ background: "var(--z-card2)", border: "1px solid rgba(0,180,255,0.2)" }}>
-                <p className="text-xs font-semibold text-white mb-2">IP для подключения</p>
-                <div className="flex items-center gap-3 p-3 rounded-lg" style={{ background: "var(--z-card)", border: "1px solid rgba(0,180,255,0.15)" }}>
-                  <Icon name="Globe" size={14} style={{ color: "var(--z-blue)" }} />
-                  <span className="font-mono text-sm" style={{ color: "var(--z-blue)" }}>msk.zetixhost.me:{server.port}</span>
-                  <button onClick={() => navigator.clipboard.writeText(`msk.zetixhost.me:${server.port}`)} className="ml-auto text-xs px-2 py-1 rounded" style={{ color: "var(--z-muted)", border: "1px solid var(--z-border)" }}>
-                    <Icon name="Copy" size={11} />
-                  </button>
-                </div>
-              </div>
-              <div className="grid gap-3">
-                {[["Название","ZetixHost Server"],["MOTD","Welcome!"],["Порт",String(server.port)],["Режим","survival"],["Сложность","normal"],["Макс. игроков","20"]].map(([l,v]) => (
-                  <div key={l} className="p-4 rounded-xl" style={{ background: "var(--z-card2)", border: "1px solid var(--z-border)" }}>
-                    <label className="text-xs block mb-1.5" style={{ color: "var(--z-muted)" }}>{l}</label>
-                    <input className="z-input text-sm py-2" defaultValue={v} />
-                  </div>
-                ))}
-              </div>
-              <button className="z-btn-primary mt-5 px-5 py-2.5 text-sm"><Icon name="Save" size={13} />Сохранить</button>
-            </div>
+            <SettingsTab server={server} user={user} setUser={setUser} />
           )}
         </main>
       </div>
@@ -1221,9 +1287,38 @@ function getAccounts(): Record<string, UserState> {
 function saveAccount(u: UserState) {
   const all = getAccounts(); all[u.email.toLowerCase()] = u;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+  broadcastAccountUpdate(u);
 }
 function getSession(): UserState | null {
   try { const s = sessionStorage.getItem(SESSION_KEY); return s ? JSON.parse(s) : null; } catch { return null; }
+}
+
+// ─── Cross-tab Storage Sync ────────────────────────────────────────────────
+let storageListeners: ((u: UserState) => void)[] = [];
+function useStorageSync(email: string | undefined, callback: (u: UserState) => void) {
+  const cb = useRef(callback);
+  cb.current = callback;
+  useEffect(() => {
+    if (!email) return;
+    const fn = (u: UserState) => { if (u.email.toLowerCase() === email.toLowerCase()) cb.current(u); };
+    storageListeners.push(fn);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== STORAGE_KEY) return;
+      try {
+        const all: Record<string, UserState> = JSON.parse(e.newValue || "{}");
+        const updated = all[email.toLowerCase()];
+        if (updated) cb.current(updated);
+      } catch { /* ignore */ }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => {
+      storageListeners = storageListeners.filter(f => f !== fn);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [email]);
+}
+function broadcastAccountUpdate(u: UserState) {
+  storageListeners.forEach(fn => fn(u));
 }
 
 // ─── Root ─────────────────────────────────────────────────────────────────────
@@ -1285,8 +1380,15 @@ export default function Index() {
   useBalanceTopup(({ email, amount }) => {
     setUser(prev => {
       if (!prev || prev.email.toLowerCase() !== email.toLowerCase()) return prev;
-      return { ...prev, balance: prev.balance + amount };
+      const updated = { ...prev, balance: prev.balance + amount };
+      saveAccount(updated);
+      return updated;
     });
+  });
+
+  useStorageSync(user?.email, (updated) => {
+    setUser(updated);
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(updated));
   });
 
   if (page === "panel") {
