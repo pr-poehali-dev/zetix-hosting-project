@@ -3,8 +3,10 @@ import Icon from "@/components/ui/icon";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DOLPHIN_URL = "https://cdn.poehali.dev/projects/dd998167-bb93-472a-9cea-24032a9ccac4/bucket/60e5fcdd-090a-4eb1-92e1-a016cfdeb55a.png";
+const HERO_3D_URL = "https://cdn.poehali.dev/projects/dd998167-bb93-472a-9cea-24032a9ccac4/files/56b77026-7717-4ba9-beaa-b47f55299335.jpg";
 const SECRET_PROMO = "ADMINMENULOGIN123";
 const MAX_SERVERS = 5;
+const BONUS_ON_REGISTER = 50;
 
 function randPort() { return Math.floor(10000 + Math.random() * 89999); }
 function randId() { return Math.random().toString(36).slice(2, 10); }
@@ -17,7 +19,7 @@ type AuthMode = "login" | "register";
 type ServiceTab = "game" | "vds" | "web";
 type PanelTab = "console" | "files" | "settings" | "db" | "subdomains" | "co-owners";
 type ServerStatus = "offline" | "starting" | "online" | "stopping";
-type PayMethod = "card" | "sbp" | "sber" | "sberkids";
+type PayMethod = "card" | "sbp" | "sber" | "sberkids" | "balance";
 
 interface PlanAny { id: string; price: number; cpu: string; ram: string; disk: string; net: string; [k: string]: string | number; }
 interface ServerFile { name: string; type: "file" | "folder"; size?: string; ext?: string; }
@@ -30,32 +32,27 @@ interface UserState { name: string; email: string; password: string; balance: nu
 
 // ─── Plan Data ────────────────────────────────────────────────────────────────
 const gamePlans: PlanAny[] = [
-  { id: "GAME RU-1", price: 245, cpu: "2 vCPU (Intel Core i5-12500)", ram: "4 GB DDR5", disk: "24 GB NVMe", net: "1 Гбит/с", backups: 0, db: 1 },
-  { id: "GAME RU-2", price: 366, cpu: "3 vCPU (Intel Core i5-12500)", ram: "6 GB DDR5", disk: "32 GB NVMe", net: "1 Гбит/с", backups: 1, db: 1 },
-  { id: "GAME RU-3", price: 510, cpu: "4 vCPU (Intel Core i5-12500)", ram: "8 GB DDR5", disk: "48 GB NVMe", net: "1 Гбит/с", backups: 2, db: 2 },
-  { id: "GAME RU-4", price: 767, cpu: "6 vCPU (Intel Core i5-12500)", ram: "12 GB DDR5", disk: "56 GB NVMe", net: "1 Гбит/с", backups: 2, db: 2 },
-  { id: "GAME RU-5", price: 1027, cpu: "8 vCPU (Intel Core i5-12500)", ram: "16 GB DDR5", disk: "72 GB NVMe", net: "1 Гбит/с", backups: 3, db: 3 },
-];
-const vdsPlans: PlanAny[] = [
-  { id: "VDS DE-1", price: 249, cpu: "1 vCPU (AMD Ryzen 9 5950X)", ram: "2 GB", disk: "24 GB NVMe SSD", net: "500 Мбит/с", ddos: "L4/7" },
-  { id: "VDS DE-2", price: 529, cpu: "2 vCPU (AMD Ryzen 9 5950X)", ram: "4 GB", disk: "48 GB NVMe SSD", net: "500 Мбит/с", ddos: "L4/7" },
-  { id: "VDS DE-3", price: 949, cpu: "4 vCPU (AMD Ryzen 9 5950X)", ram: "8 GB", disk: "96 GB NVMe SSD", net: "500 Мбит/с", ddos: "L4/7" },
-  { id: "VDS DE-4", price: 1649, cpu: "8 vCPU (AMD Ryzen 9 5950X)", ram: "16 GB", disk: "192 GB NVMe SSD", net: "500 Мбит/с", ddos: "L4/7" },
-  { id: "VDS DE-5", price: 2899, cpu: "12 vCPU (AMD Ryzen 9 5950X)", ram: "32 GB", disk: "384 GB NVMe SSD", net: "500 Мбит/с", ddos: "L4/7" },
+  { id: "Кролик", price: 130, cpu: "225%", ram: "2GB DDR4", disk: "16GB NVMe", ddos: "DDoS защита", flag: "🇷🇺" },
+  { id: "Овца", price: 330, cpu: "450%", ram: "4GB DDR4", disk: "32GB NVMe", ddos: "DDoS защита", flag: "🇷🇺" },
+  { id: "Дельфин", price: 529, cpu: "550%", ram: "6GB DDR4", disk: "64GB NVMe", ddos: "DDoS защита", flag: "🇷🇺" },
+  { id: "Ифрит", price: 790, cpu: "850%", ram: "8GB DDR4", disk: "64GB NVMe", ddos: "DDoS защита", flag: "🇷🇺" },
+  { id: "Древний страж", price: 1030, cpu: "950%", ram: "12GB DDR4", disk: "96GB NVMe", ddos: "DDoS защита", flag: "🇷🇺" },
+  { id: "Иссушитель", price: 1319, cpu: "1050%", ram: "16GB DDR4", disk: "96GB NVMe", ddos: "DDoS защита", flag: "🇷🇺" },
+  { id: "Эндермен", price: 1729, cpu: "1300%", ram: "24GB DDR4", disk: "128GB NVMe", ddos: "DDoS защита", flag: "🇷🇺" },
 ];
 
-const PLAN_IMAGES: Record<string, string> = {
-  "GAME RU-1": "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=600&q=80",
-  "GAME RU-2": "https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=600&q=80",
-  "GAME RU-3": "https://images.unsplash.com/photo-1606868306217-dbf5046868d2?w=600&q=80",
-  "GAME RU-4": "https://images.unsplash.com/photo-1600861194942-f883de0dfe96?w=600&q=80",
-  "GAME RU-5": "https://images.unsplash.com/photo-1620288627223-53302f4e8c74?w=600&q=80",
-  "VDS DE-1": "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=600&q=80",
-  "VDS DE-2": "https://images.unsplash.com/photo-1520869562399-e772f042f422?w=600&q=80",
-  "VDS DE-3": "https://images.unsplash.com/photo-1545987796-200677ee1011?w=600&q=80",
-  "VDS DE-4": "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=600&q=80",
-  "VDS DE-5": "https://images.unsplash.com/photo-1629654297299-c8506221ca97?w=600&q=80",
-};
+const vdsPlans: PlanAny[] = [
+  { id: "DE-1", price: 270, cpu: "AMD Ryzen 9 5950X", vcpu: "1 vCPU", ram: "2GB DDR4", disk: "80GB NVMe", net: "500 Мбит/с", ddos: "DDoS защита", flag: "🇩🇪" },
+  { id: "DE-2", price: 540, cpu: "AMD Ryzen 9 5950X", vcpu: "2 vCPU", ram: "4GB DDR4", disk: "120GB NVMe", net: "500 Мбит/с", ddos: "DDoS защита", flag: "🇩🇪" },
+  { id: "DE-3", price: 1000, cpu: "AMD Ryzen 9 5950X", vcpu: "4 vCPU", ram: "8GB DDR4", disk: "180GB NVMe", net: "500 Мбит/с", ddos: "DDoS защита", flag: "🇩🇪" },
+  { id: "DE-4", price: 1670, cpu: "AMD Ryzen 9 5950X", vcpu: "6 vCPU", ram: "16GB DDR4", disk: "240GB NVMe", net: "500 Мбит/с", ddos: "DDoS защита", flag: "🇩🇪" },
+  { id: "DE-5", price: 1989, cpu: "AMD Ryzen 9 5950X", vcpu: "8 vCPU", ram: "24GB DDR4", disk: "300GB NVMe", net: "500 Мбит/с", ddos: "DDoS защита", flag: "🇩🇪" },
+  { id: "DE-6", price: 2560, cpu: "AMD Ryzen 9 5950X", vcpu: "12 vCPU", ram: "32GB DDR4", disk: "360GB NVMe", net: "500 Мбит/с", ddos: "DDoS защита", flag: "🇩🇪" },
+  { id: "DE-7", price: 3840, cpu: "AMD Ryzen 9 5950X", vcpu: "12 vCPU", ram: "48GB DDR4", disk: "480GB NVMe", net: "500 Мбит/с", ddos: "DDoS защита", flag: "🇩🇪" },
+  { id: "DE-8", price: 5120, cpu: "AMD Ryzen 9 5950X", vcpu: "16 vCPU", ram: "64GB DDR4", disk: "520GB NVMe", net: "500 Мбит/с", ddos: "DDoS защита", flag: "🇩🇪" },
+];
+
+
 
 const startupMessages = [
   "[Server thread/INFO]: Starting minecraft server version 1.20.4",
@@ -213,21 +210,33 @@ function Navbar({ onAuthClick, onPanelClick, onProfileClick, loggedIn, user }: {
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 function HeroSection({ onOrderClick }: { onOrderClick: () => void }) {
   return (
-    <section className="min-h-screen flex items-center px-6 pt-20" style={{ background: "var(--z-bg)" }}>
-      <div className="max-w-6xl mx-auto w-full grid md:grid-cols-2 gap-12 items-center">
+    <section className="relative min-h-screen flex items-center px-6 pt-20 overflow-hidden"
+      style={{ background: "linear-gradient(135deg, #0a0a1a 0%, #0d1b3e 40%, #070d20 100%)" }}>
+      <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at 60% 50%, rgba(60,60,180,0.25) 0%, transparent 65%)" }} />
+      <div className="max-w-6xl mx-auto w-full grid md:grid-cols-2 gap-12 items-center relative z-10">
         <div>
-          <p className="text-xl mb-2 font-medium" style={{ color: "var(--z-muted)" }}>Надежный</p>
-          <h1 className="text-5xl md:text-6xl font-bold text-white leading-tight mb-5">
-            Хостинг, где<br />ваши идеи<br />обретают<br />жизнь
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full mb-7 text-sm font-medium"
+            style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "white" }}>
+            <span>🇩🇪</span>
+            <span>Запустили продажу VDS в Германии!</span>
+            <a href="#services" className="ml-1 font-semibold" style={{ color: "var(--z-blue)" }}>Подробнее</a>
+          </div>
+          <h1 className="text-5xl md:text-6xl font-extrabold text-white leading-tight mb-5">
+            Идеальный хостинг для<br />
+            <span style={{ color: "#a855f7" }}>вашего проекта</span>
           </h1>
-          <p className="text-base mb-8" style={{ color: "var(--z-muted)" }}>
-            Создавайте проекты и достигайте<br />недостижимого вместе с нами
+          <p className="text-base mb-8" style={{ color: "rgba(255,255,255,0.55)" }}>
+            воплощайте свои фантазии в реальность, и покоряйте<br />вершины вместе с нами
           </p>
-          <button onClick={onOrderClick} className="z-btn-primary px-7 py-3.5 text-base">→ Заказать</button>
+          <button onClick={onOrderClick}
+            className="flex items-center gap-2 px-7 py-3.5 text-base font-semibold rounded-xl transition-all hover:opacity-90"
+            style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.18)", color: "white" }}>
+            → Перейти к услугам
+          </button>
         </div>
-        <div className="flex justify-center items-center">
-          <img src={DOLPHIN_URL} alt="ZetixHost Dolphin" className="w-72 md:w-96 object-contain"
-            style={{ filter: "drop-shadow(0 0 60px rgba(0,180,255,0.45))" }} />
+        <div className="flex justify-end items-center">
+          <img src={HERO_3D_URL} alt="3D shape" className="w-full max-w-lg object-contain rounded-2xl"
+            style={{ filter: "drop-shadow(0 0 80px rgba(80,80,220,0.5))" }} />
         </div>
       </div>
     </section>
@@ -268,63 +277,116 @@ function AdvantagesSection() {
 }
 
 // ─── Plan Card ────────────────────────────────────────────────────────────────
-function PlanCard({ plan, onBuy }: { plan: PlanAny; onBuy: (p: PlanAny) => void }) {
-  const img = PLAN_IMAGES[plan.id];
-  const isVds = plan.id.startsWith("VDS");
+function GamePlanCard({ plan, onBuy }: { plan: PlanAny; onBuy: (p: PlanAny) => void }) {
   return (
-    <div className="z-card flex flex-col hover:border-blue-500/40 transition-all overflow-hidden">
-      <div className="relative h-36 overflow-hidden">
-        <img src={img} alt={plan.id} className="w-full h-full object-cover opacity-50" />
-        <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, transparent 20%, var(--z-card) 100%)" }} />
-        <div className="absolute top-3 left-3">
-          <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: "rgba(0,0,0,0.7)", color: "white" }}>
-            {isVds ? "🇩🇪 Германия" : "🇷🇺 Россия"}
-          </span>
+    <div className="flex flex-col rounded-2xl p-5 transition-all hover:border-white/20 cursor-pointer"
+      style={{ background: "#111214", border: "1px solid #222428", minHeight: 220 }}>
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-base">{plan.flag as string}</span>
+        <span className="font-bold text-white text-base">{plan.id}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs" style={{ background: "#1a1b1f", color: "#aaa" }}>
+          <Icon name="Globe" fallback="Circle" size={11} style={{ color: "#aaa" }} />
+          <span>{plan.cpu as string} CPU</span>
         </div>
-        <div className="absolute top-3 right-3">
-          <Icon name={isVds ? "Server" : "Gamepad2"} fallback="Server" size={16} style={{ color: "var(--z-blue)" }} />
+        <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs" style={{ background: "#1a1b1f", color: "#aaa" }}>
+          <Icon name="MemoryStick" fallback="Circle" size={11} style={{ color: "#aaa" }} />
+          <span>{plan.ram as string}</span>
+        </div>
+        <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs" style={{ background: "#1a1b1f", color: "#aaa" }}>
+          <Icon name="HardDrive" fallback="Circle" size={11} style={{ color: "#aaa" }} />
+          <span>{plan.disk as string}</span>
+        </div>
+        <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs" style={{ background: "#1a1b1f", color: "#aaa" }}>
+          <Icon name="Shield" fallback="Circle" size={11} style={{ color: "#aaa" }} />
+          <span>{plan.ddos as string}</span>
         </div>
       </div>
-      <div className="p-5 flex flex-col gap-3 flex-1">
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="font-bold text-white block">{plan.id}</span>
-            <span className="text-xs" style={{ color: "var(--z-muted)" }}>{isVds ? "🇩🇪 Германия" : "🇷🇺 Россия"}</span>
-          </div>
-          <div className="text-right">
-            <span className="text-xl font-bold text-white">{(plan.price as number).toLocaleString("ru-RU")}₽</span>
-            <span className="text-xs ml-1" style={{ color: "var(--z-muted)" }}>/мес.</span>
-          </div>
+      <div className="mt-auto">
+        <div className="mb-3">
+          <span className="text-3xl font-extrabold text-white">{(plan.price as number).toLocaleString("ru-RU")}₽</span>
+          <div className="text-xs mt-0.5" style={{ color: "#f59e0b" }}>в месяц</div>
         </div>
-        <div className="flex flex-col gap-2">
-          <SpecRow icon="Cpu" label="CPU" value={plan.cpu as string} />
-          <SpecRow icon="MemoryStick" label="RAM" value={plan.ram as string} />
-          <SpecRow icon="HardDrive" label="Диск" value={plan.disk as string} />
-          <SpecRow icon="Wifi" label="Сеть" value={plan.net as string} />
-          {isVds && plan.ddos && <SpecRow icon="Shield" label="DDoS" value={plan.ddos as string} />}
-          {!isVds && <SpecRow icon="RefreshCw" label="Бэкапы" value={String(plan.backups)} />}
-        </div>
-        <button onClick={() => onBuy(plan)} className="z-btn-primary w-full py-2.5 justify-center text-sm mt-auto">
-          <Icon name="ShoppingCart" size={13} /> Купить →
+        <button onClick={() => onBuy(plan)}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all hover:bg-white/10"
+          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid #333", color: "white" }}>
+          <Icon name="ShoppingBag" fallback="ShoppingCart" size={13} />
+          Приобрести — {(plan.price as number).toLocaleString("ru-RU")}₽
         </button>
       </div>
     </div>
   );
 }
 
+function VdsDePlanCard({ plan, onBuy }: { plan: PlanAny; onBuy: (p: PlanAny) => void }) {
+  return (
+    <div className="flex flex-col rounded-2xl p-5 transition-all hover:border-white/20 cursor-pointer"
+      style={{ background: "#111214", border: "1px solid #222428", minHeight: 260 }}>
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-base">{plan.flag as string}</span>
+        <span className="font-bold text-white text-base">{plan.id}</span>
+      </div>
+      <div className="flex flex-col gap-1.5 mb-4">
+        <div className="flex items-center gap-1.5 text-xs" style={{ color: "#aaa" }}>
+          <Icon name="Globe" fallback="Circle" size={11} style={{ color: "#aaa" }} />
+          <span>{plan.cpu as string}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs" style={{ background: "#1a1b1f", color: "#aaa" }}>
+            <Icon name="Cpu" fallback="Circle" size={11} style={{ color: "#aaa" }} />
+            <span>{plan.vcpu as string}</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs" style={{ background: "#1a1b1f", color: "#aaa" }}>
+            <Icon name="MemoryStick" fallback="Circle" size={11} style={{ color: "#aaa" }} />
+            <span>{plan.ram as string}</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs" style={{ background: "#1a1b1f", color: "#aaa" }}>
+            <Icon name="HardDrive" fallback="Circle" size={11} style={{ color: "#aaa" }} />
+            <span>{plan.disk as string}</span>
+          </div>
+          <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs" style={{ background: "#1a1b1f", color: "#aaa" }}>
+            <Icon name="Wifi" fallback="Circle" size={11} style={{ color: "#aaa" }} />
+            <span>{plan.net as string}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs" style={{ background: "#1a1b1f", color: "#aaa" }}>
+          <Icon name="Shield" fallback="Circle" size={11} style={{ color: "#aaa" }} />
+          <span>{plan.ddos as string}</span>
+        </div>
+      </div>
+      <div className="mt-auto">
+        <div className="mb-3">
+          <span className="text-3xl font-extrabold text-white">{(plan.price as number).toLocaleString("ru-RU")}₽</span>
+          <div className="text-xs mt-0.5" style={{ color: "#f59e0b" }}>в месяц</div>
+        </div>
+        <button onClick={() => onBuy(plan)}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all hover:bg-white/10"
+          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid #333", color: "white" }}>
+          <Icon name="ShoppingBag" fallback="ShoppingCart" size={13} />
+          Приобрести — {(plan.price as number).toLocaleString("ru-RU")}₽
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PlanCard({ plan, onBuy }: { plan: PlanAny; onBuy: (p: PlanAny) => void }) {
+  return <GamePlanCard plan={plan} onBuy={onBuy} />;
+}
+
 // ─── Services ─────────────────────────────────────────────────────────────────
 function ServicesSection({ onBuy }: { onBuy: (p: PlanAny) => void }) {
   const [tab, setTab] = useState<ServiceTab>("game");
   const tabs = [
-    { key: "game" as ServiceTab, icon: "Gamepad2", label: "Игровые серверы" },
-    { key: "vds" as ServiceTab, icon: "Server", label: "Виртуальные серверы" },
+    { key: "game" as ServiceTab, icon: "Gamepad2", label: "🇷🇺 VDS Россия" },
+    { key: "vds" as ServiceTab, icon: "Server", label: "🇩🇪 VDS Германия" },
     { key: "web" as ServiceTab, icon: "Globe", label: "Веб серверы" },
   ];
-  const plans = tab === "game" ? gamePlans : tab === "vds" ? vdsPlans : [];
   return (
-    <section id="services" className="py-20 px-6">
+    <section id="services" className="py-20 px-6" style={{ background: "var(--z-bg)" }}>
       <div className="max-w-6xl mx-auto">
-        <h2 className="text-4xl md:text-5xl font-bold text-white text-center mb-2">Наши сервисы</h2>
+        <h2 className="text-4xl md:text-5xl font-bold text-white text-center mb-2">Наши тарифы</h2>
         <p className="text-center mb-10" style={{ color: "var(--z-blue)" }}>Выберите подходящий тариф</p>
         <div className="flex justify-center gap-2 mb-8 flex-wrap">
           {tabs.map(t => (
@@ -333,7 +395,7 @@ function ServicesSection({ onBuy }: { onBuy: (p: PlanAny) => void }) {
               style={tab === t.key
                 ? { background: "var(--z-card2)", border: "1px solid var(--z-border)", color: "white" }
                 : { color: "var(--z-muted)", border: "1px solid transparent" }}>
-              <Icon name={t.icon} fallback="Circle" size={13} />{t.label}
+              {t.label}
             </button>
           ))}
         </div>
@@ -342,9 +404,13 @@ function ServicesSection({ onBuy }: { onBuy: (p: PlanAny) => void }) {
             <Icon name="Globe" size={48} className="mx-auto mb-4 opacity-20" />
             <p>Веб-серверы скоро появятся</p>
           </div>
+        ) : tab === "game" ? (
+          <div id="plans" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {gamePlans.map(p => <GamePlanCard key={p.id} plan={p} onBuy={onBuy} />)}
+          </div>
         ) : (
-          <div id="plans" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {plans.map(p => <PlanCard key={p.id} plan={p} onBuy={onBuy} />)}
+          <div id="plans" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {vdsPlans.map(p => <VdsDePlanCard key={p.id} plan={p} onBuy={onBuy} />)}
           </div>
         )}
       </div>
@@ -356,25 +422,33 @@ function ServicesSection({ onBuy }: { onBuy: (p: PlanAny) => void }) {
 function BuyModal({ plan, user, onClose, onBuy }: {
   plan: PlanAny; user: UserState; onClose: () => void; onBuy: () => void;
 }) {
-  const [method, setMethod] = useState<PayMethod>("card");
+  const [method, setMethod] = useState<PayMethod>("balance");
   const [card, setCard] = useState(""); const [cardName, setCardName] = useState(""); const [expiry, setExpiry] = useState(""); const [cvv, setCvv] = useState("");
   const [loading, setLoading] = useState(false);
+  const price = plan.price as number;
+  const hasBalance = user.balance >= price;
 
   const handleExpiry = (v: string) => { const d = v.replace(/\D/g,"").slice(0,4); setExpiry(d.length > 2 ? d.slice(0,2)+"/"+d.slice(2) : d); };
 
   const submitPayment = async () => {
     setLoading(true);
-    await new Promise(r => setTimeout(r, 900));
+    await new Promise(r => setTimeout(r, 600));
     setLoading(false);
     pushAdminLog({ time: nowStr(), msg: `Покупка: ${user.email} оплатил тариф ${plan.id} — ${plan.price}₽`, type: "purchase", purchaseId: randId(), purchasePlan: plan });
     onBuy();
   };
 
+  const buyFromBalance = () => {
+    if (!hasBalance) return;
+    pushAdminLog({ time: nowStr(), msg: `Покупка с баланса: ${user.email} приобрёл тариф ${plan.id} — ${price}₽`, type: "purchase", purchaseId: randId(), purchasePlan: plan });
+    onBuy();
+  };
+
   const payMethods: { key: PayMethod; label: string; icon: string }[] = [
+    { key: "balance", label: "Баланс", icon: "Wallet" },
     { key: "card", label: "Банковская карта", icon: "CreditCard" },
     { key: "sbp", label: "СБП", icon: "Smartphone" },
     { key: "sber", label: "Сбербанк", icon: "Building" },
-    { key: "sberkids", label: "СберКидс", icon: "Star" },
   ];
 
   return (
@@ -383,7 +457,7 @@ function BuyModal({ plan, user, onClose, onBuy }: {
         <div className="flex items-center justify-between mb-5">
           <div>
             <h3 className="text-xl font-bold text-white">Оплата тарифа</h3>
-            <p className="text-sm" style={{ color: "var(--z-blue)" }}>{plan.id} — {(plan.price as number).toLocaleString("ru-RU")}₽/мес.</p>
+            <p className="text-sm" style={{ color: "var(--z-blue)" }}>{plan.id} — {price.toLocaleString("ru-RU")}₽/мес.</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors">
             <Icon name="X" size={15} style={{ color: "var(--z-muted)" }} />
@@ -400,13 +474,45 @@ function BuyModal({ plan, user, onClose, onBuy }: {
             </button>
           ))}
         </div>
-        {method !== "card" ? (
+        {method === "balance" ? (
           <div className="p-4 rounded-xl text-sm" style={{ background: "rgba(0,180,255,0.06)", border: "1px solid rgba(0,180,255,0.15)" }}>
-            <p className="font-semibold text-white mb-2">{method === "sbp" ? "Оплата по СБП" : method === "sber" ? "Оплата Сбербанк" : "Оплата СберКидс"}</p>
+            <div className="flex items-center justify-between mb-3">
+              <span style={{ color: "var(--z-muted)" }}>Ваш баланс:</span>
+              <span className="text-white font-bold text-lg">{user.balance.toLocaleString("ru-RU")}₽</span>
+            </div>
+            <div className="flex items-center justify-between mb-4">
+              <span style={{ color: "var(--z-muted)" }}>К оплате:</span>
+              <span className="text-white font-bold text-lg">{price.toLocaleString("ru-RU")}₽</span>
+            </div>
+            {hasBalance ? (
+              <>
+                <div className="flex items-center justify-between mb-4 p-3 rounded-xl" style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)" }}>
+                  <span className="text-sm" style={{ color: "#22c55e" }}>После оплаты останется:</span>
+                  <span className="font-bold" style={{ color: "#22c55e" }}>{(user.balance - price).toLocaleString("ru-RU")}₽</span>
+                </div>
+                <button onClick={buyFromBalance} className="z-btn-primary w-full py-3 justify-center text-sm">
+                  <Icon name="ShoppingBag" fallback="ShoppingCart" size={14} /> Приобрести — {price.toLocaleString("ru-RU")}₽
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="p-3 rounded-xl mb-3" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
+                  <p className="text-sm" style={{ color: "#ef4444" }}>Недостаточно средств. Не хватает {(price - user.balance).toLocaleString("ru-RU")}₽</p>
+                </div>
+                <a href="https://t.me/HellwayYT" target="_blank" rel="noopener noreferrer"
+                  className="z-btn-primary w-full py-3 justify-center text-sm flex items-center gap-2">
+                  <Icon name="Send" size={14} /> Пополнить баланс
+                </a>
+              </>
+            )}
+          </div>
+        ) : method !== "card" ? (
+          <div className="p-4 rounded-xl text-sm" style={{ background: "rgba(0,180,255,0.06)", border: "1px solid rgba(0,180,255,0.15)" }}>
+            <p className="font-semibold text-white mb-2">{method === "sbp" ? "Оплата по СБП" : "Оплата Сбербанк"}</p>
             <p style={{ color: "var(--z-muted)" }}>{method === "sbp" ? "📱 СБП на номер:" : "🏦 Перевод на карту:"}<br />
               <span className="text-white font-mono">{method === "sbp" ? "+7 921 700-61-74" : "2202 2082 8801 8451"}</span>
             </p>
-            <p className="mt-2" style={{ color: "var(--z-muted)" }}>Сумма: <span className="text-white font-bold">{(plan.price as number).toLocaleString("ru-RU")}₽</span></p>
+            <p className="mt-2" style={{ color: "var(--z-muted)" }}>Сумма: <span className="text-white font-bold">{price.toLocaleString("ru-RU")}₽</span></p>
             <button onClick={submitPayment} disabled={loading} className="z-btn-primary w-full py-3 justify-center text-sm mt-4">
               {loading ? <><Icon name="Loader2" size={14} className="animate-spin" /> Обработка...</> : <><Icon name="Zap" size={14} /> Оплатить</>}
             </button>
@@ -520,6 +626,69 @@ function AdminLogsPanel({ onConfirmPurchase }: { onConfirmPurchase: (id: string,
   );
 }
 
+// ─── Balance Topup Form (visible to all users, topups by email) ───────────────
+function BalanceTopupForm({ currentUser, setUser }: { currentUser: UserState; setUser: (u: UserState) => void }) {
+  const [email, setEmail] = useState(currentUser.email);
+  const [amount, setAmount] = useState("");
+  const [msg, setMsg] = useState<"" | "success" | "notfound">("") ;
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = parseInt(amount);
+    if (!email.trim() || !amt || amt < 1) return;
+    setLoading(true);
+    await new Promise(r => setTimeout(r, 500));
+    setLoading(false);
+    const accounts = getAccounts();
+    const key = email.trim().toLowerCase();
+    if (!accounts[key]) { setMsg("notfound"); return; }
+    triggerBalanceTopup({ email: key, amount: amt });
+    const updated = { ...accounts[key], balance: accounts[key].balance + amt };
+    saveAccount(updated);
+    broadcastAccountUpdate(updated);
+    if (key === currentUser.email.toLowerCase()) {
+      setUser({ ...currentUser, balance: currentUser.balance + amt });
+    }
+    pushAdminLog({ time: nowStr(), msg: `💰 Пополнение баланса: ${key} +${amt}₽`, type: "info" });
+    setMsg("success");
+    setAmount("");
+    setTimeout(() => setMsg(""), 4000);
+  };
+
+  return (
+    <div className="z-card p-6 mb-4">
+      <h3 className="font-bold text-white mb-2 flex items-center gap-2">
+        <Icon name="Wallet" size={15} style={{ color: "var(--z-blue)" }} /> Пополнить баланс
+      </h3>
+      <p className="text-sm mb-4" style={{ color: "var(--z-muted)" }}>
+        Введите почту и сумму — баланс пополнится мгновенно в реальном времени.
+      </p>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <input className="z-input" type="email" placeholder="Email аккаунта" value={email}
+          onChange={e => { setEmail(e.target.value); setMsg(""); }} required />
+        <div className="flex gap-2">
+          <input className="z-input flex-1" type="number" min="1" placeholder="Сумма ₽" value={amount}
+            onChange={e => { setAmount(e.target.value); setMsg(""); }} required />
+          <button type="submit" disabled={loading} className="z-btn-primary px-5 py-2 text-sm">
+            {loading ? <Icon name="Loader2" size={14} className="animate-spin" /> : <><Icon name="Plus" size={13} /> Пополнить</>}
+          </button>
+        </div>
+      </form>
+      {msg === "success" && (
+        <div className="mt-3 p-3 rounded-xl flex items-center gap-2 text-sm" style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", color: "#22c55e" }}>
+          <Icon name="CheckCircle" size={14} /> Баланс успешно пополнен на {amount}₽
+        </div>
+      )}
+      {msg === "notfound" && (
+        <div className="mt-3 p-3 rounded-xl text-sm" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444" }}>
+          Аккаунт с такой почтой не найден
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Profile Page ─────────────────────────────────────────────────────────────
 function ProfilePage({ user, setUser, onBack, onConfirmPurchase, onLogout }: {
   user: UserState; setUser: (u: UserState) => void; onBack: () => void; onConfirmPurchase: (id: string, plan: PlanAny) => void; onLogout: () => void;
@@ -611,19 +780,8 @@ function ProfilePage({ user, setUser, onBack, onConfirmPurchase, onLogout }: {
           </div>
         </div>
 
-        {/* Deposit via support */}
-        <div className="z-card p-6 mb-4">
-          <h3 className="font-bold text-white mb-2 flex items-center gap-2">
-            <Icon name="Wallet" size={15} style={{ color: "var(--z-blue)" }} /> Пополнить баланс
-          </h3>
-          <p className="text-sm mb-4" style={{ color: "var(--z-muted)" }}>
-            Пополнение баланса доступно только через техническую поддержку. Напишите нам в Telegram — ответим быстро.
-          </p>
-          <a href="https://t.me/HellwayYT" target="_blank" rel="noopener noreferrer"
-            className="z-btn-primary py-2.5 justify-center text-sm flex items-center gap-2 w-full">
-            <Icon name="Send" size={13} /> Написать в поддержку @HellwayYT
-          </a>
-        </div>
+        {/* Deposit via logs */}
+        <BalanceTopupForm currentUser={user} setUser={setUser} />
 
         {/* Promo */}
         <div className="z-card p-6 mb-4">
@@ -1202,7 +1360,8 @@ function AuthPage({ mode, setMode, onBack, onSuccess }: {
     if (mode === "register") {
       if (form.password !== form.confirm) { setError("Пароли не совпадают"); return; }
       if (accounts[key]) { setError("Аккаунт с таким email уже существует"); return; }
-      const u: UserState = { name: form.name || form.email.split("@")[0], email: form.email, password: form.password, balance: 0, isAdmin: false, servers: [] };
+      const u: UserState = { name: form.name || form.email.split("@")[0], email: form.email, password: form.password, balance: BONUS_ON_REGISTER, isAdmin: false, servers: [] };
+      pushAdminLog({ time: nowStr(), msg: `🎁 Новый пользователь ${u.email} — начислено ${BONUS_ON_REGISTER}₽ бонуса`, type: "info" });
       saveAccount(u);
       onSuccess(u);
     } else {
@@ -1348,7 +1507,6 @@ export default function Index() {
   const handleBuyPlan = (plan: PlanAny) => {
     if (!user) { setAuthMode("register"); setPage("auth"); setBuyingPlan(plan); return; }
     if (user.servers.length >= MAX_SERVERS) { alert(`Максимум ${MAX_SERVERS} серверов на аккаунт`); return; }
-    if (user.balance < (plan.price as number)) { alert(`Недостаточно средств на балансе. Ваш баланс: ${user.balance.toLocaleString("ru-RU")}₽, стоимость тарифа: ${(plan.price as number).toLocaleString("ru-RU")}₽. Пополните баланс через тех. поддержку @HellwayYT в Telegram.`); return; }
     setBuyingPlan(plan);
   };
 
