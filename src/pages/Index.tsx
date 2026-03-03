@@ -103,6 +103,43 @@ function useAdminLogs() {
   return adminLogs;
 }
 
+// ─── Promo Codes Store ────────────────────────────────────────────────────────
+interface PromoCode { code: string; amount: number; usedBy: string[] }
+const promoCodes: PromoCode[] = [];
+let promoListeners: (() => void)[] = [];
+function pushPromoCode(code: string, amount: number) {
+  const existing = promoCodes.find(p => p.code.toUpperCase() === code.toUpperCase());
+  if (existing) return false;
+  promoCodes.push({ code: code.toUpperCase(), amount, usedBy: [] });
+  promoListeners.forEach(fn => fn());
+  return true;
+}
+function usePromoActivate(email: string) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const fn = () => setTick(t => t + 1);
+    promoListeners.push(fn);
+    return () => { promoListeners = promoListeners.filter(f => f !== fn); };
+  }, []);
+  return (code: string): { ok: boolean; amount: number; reason?: string } => {
+    const p = promoCodes.find(p => p.code === code.trim().toUpperCase());
+    if (!p) return { ok: false, amount: 0, reason: "notfound" };
+    if (p.usedBy.includes(email.toLowerCase())) return { ok: false, amount: 0, reason: "used" };
+    p.usedBy.push(email.toLowerCase());
+    promoListeners.forEach(fn => fn());
+    return { ok: true, amount: p.amount };
+  };
+}
+function usePromoCodes() {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const fn = () => setTick(t => t + 1);
+    promoListeners.push(fn);
+    return () => { promoListeners = promoListeners.filter(f => f !== fn); };
+  }, []);
+  return [...promoCodes];
+}
+
 // ─── Global Balance Top-up Store (admin → user) ────────────────────────────
 type BalanceTopupEvent = { email: string; amount: number };
 let balanceTopupListeners: ((e: BalanceTopupEvent) => void)[] = [];
@@ -558,6 +595,10 @@ function AdminLogsPanel({ onConfirmPurchase }: { onConfirmPurchase: (id: string,
   const [topupEmail, setTopupEmail] = useState("");
   const [topupAmt, setTopupAmt] = useState("");
   const [topupMsg, setTopupMsg] = useState<"" | "sent">("") ;
+  const [promoCode, setPromoCode] = useState("");
+  const [promoAmt, setPromoAmt] = useState("100");
+  const [promoMsg, setPromoMsg] = useState<"" | "created" | "exists">("") ;
+  const allPromos = usePromoCodes();
 
   const handleConfirm = (log: AdminLog) => {
     if (!log.purchaseId || !log.purchasePlan) return;
@@ -575,6 +616,21 @@ function AdminLogsPanel({ onConfirmPurchase }: { onConfirmPurchase: (id: string,
     setTopupMsg("sent");
     setTopupEmail(""); setTopupAmt("");
     setTimeout(() => setTopupMsg(""), 3000);
+  };
+
+  const handleCreatePromo = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = parseInt(promoAmt);
+    if (!promoCode.trim() || !amt || amt < 1 || amt > 8000) return;
+    const ok = pushPromoCode(promoCode.trim(), amt);
+    if (ok) {
+      pushAdminLog({ time: nowStr(), msg: `🎟 Промокод создан: ${promoCode.trim().toUpperCase()} на ${amt}₽`, type: "info" });
+      setPromoMsg("created");
+      setPromoCode("");
+    } else {
+      setPromoMsg("exists");
+    }
+    setTimeout(() => setPromoMsg(""), 3000);
   };
 
   return (
@@ -598,6 +654,46 @@ function AdminLogsPanel({ onConfirmPurchase }: { onConfirmPurchase: (id: string,
           </div>
           {topupMsg === "sent" && <p className="text-xs" style={{ color: "#22c55e" }}>✓ Баланс пополнен в реальном времени</p>}
         </form>
+      </div>
+
+      {/* Promo code creator */}
+      <div className="mb-4 p-3 rounded-xl" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)" }}>
+        <p className="text-xs font-bold mb-2" style={{ color: "#f59e0b" }}>🎟 Создать промокод</p>
+        <form onSubmit={handleCreatePromo} className="flex flex-col gap-2">
+          <input className="z-input text-sm py-1.5 uppercase" placeholder="Код (например: SUMMER25)" value={promoCode}
+            onChange={e => { setPromoCode(e.target.value.toUpperCase()); setPromoMsg(""); }} required />
+          <div className="flex gap-2 items-center flex-wrap">
+            {[100,200,300,500,1000,2000,5000,8000].map(v => (
+              <button key={v} type="button" onClick={() => setPromoAmt(String(v))}
+                className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all"
+                style={promoAmt === String(v)
+                  ? { background: "rgba(245,158,11,0.2)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.4)" }
+                  : { background: "var(--z-card)", color: "var(--z-muted)", border: "1px solid var(--z-border)" }}>
+                {v}₽
+              </button>
+            ))}
+            <input className="z-input text-sm py-1 w-20" type="number" min="1" max="8000" placeholder="₽" value={promoAmt}
+              onChange={e => setPromoAmt(e.target.value)} />
+            <button type="submit" className="z-btn-primary px-4 py-1.5 text-xs ml-auto">
+              <Icon name="Plus" size={12} /> Создать
+            </button>
+          </div>
+          {promoMsg === "created" && <p className="text-xs" style={{ color: "#22c55e" }}>✓ Промокод создан</p>}
+          {promoMsg === "exists" && <p className="text-xs" style={{ color: "#ef4444" }}>Промокод уже существует</p>}
+        </form>
+        {allPromos.length > 0 && (
+          <div className="mt-3 flex flex-col gap-1.5">
+            <p className="text-xs font-bold" style={{ color: "var(--z-muted)" }}>Активные промокоды</p>
+            {allPromos.map(p => (
+              <div key={p.code} className="flex items-center justify-between px-3 py-1.5 rounded-lg text-xs"
+                style={{ background: "var(--z-card)", border: "1px solid var(--z-border)" }}>
+                <span className="font-mono font-bold text-white">{p.code}</span>
+                <span style={{ color: "#f59e0b" }}>{p.amount}₽</span>
+                <span style={{ color: "var(--z-muted)" }}>использован: {p.usedBy.length} чел.</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
@@ -711,15 +807,31 @@ function ProfilePage({ user, setUser, onBack, onConfirmPurchase, onLogout }: {
   user: UserState; setUser: (u: UserState) => void; onBack: () => void; onConfirmPurchase: (id: string, plan: PlanAny) => void; onLogout: () => void;
 }) {
   const [promo, setPromo] = useState("");
-  const [promoMsg, setPromoMsg] = useState<"" | "success" | "error">("");
+  const [promoMsg, setPromoMsg] = useState<"" | "success" | "error" | "used" | "admin">("");
+  const [promoAmount, setPromoAmount] = useState(0);
   const [showPass, setShowPass] = useState(false);
+  const activatePromo = usePromoActivate(user.email);
 
   const handlePromo = (e: React.FormEvent) => {
     e.preventDefault();
-    if (promo.trim() === SECRET_PROMO) {
+    const code = promo.trim().toUpperCase();
+    if (code === SECRET_PROMO) {
       setUser({ ...user, isAdmin: true });
-      setPromoMsg("success");
+      setPromoMsg("admin");
       pushAdminLog({ time: nowStr(), msg: `${user.email} активировал промокод администратора`, type: "info" });
+      setPromo("");
+      return;
+    }
+    const result = activatePromo(code);
+    if (result.ok) {
+      const updated = { ...user, balance: user.balance + result.amount };
+      setUser(updated);
+      saveAccount(updated);
+      setPromoAmount(result.amount);
+      setPromoMsg("success");
+      pushAdminLog({ time: nowStr(), msg: `🎟 ${user.email} активировал промокод ${code} +${result.amount}₽`, type: "info" });
+    } else if (result.reason === "used") {
+      setPromoMsg("used");
     } else {
       setPromoMsg("error");
     }
@@ -828,6 +940,9 @@ function ProfilePage({ user, setUser, onBack, onConfirmPurchase, onLogout }: {
               <button type="submit" className="z-btn-primary px-4 py-2 text-sm">Применить</button>
             </form>
           )}
+          {promoMsg === "success" && <p className="mt-2 text-sm" style={{ color: "#22c55e" }}>✓ Промокод применён! Баланс пополнен на {promoAmount}₽</p>}
+          {promoMsg === "admin" && <p className="mt-2 text-sm" style={{ color: "var(--z-blue)" }}>✓ Статус администратора активирован</p>}
+          {promoMsg === "used" && <p className="mt-2 text-sm" style={{ color: "#f59e0b" }}>Этот промокод уже использован вами</p>}
           {promoMsg === "error" && <p className="mt-2 text-sm" style={{ color: "#ef4444" }}>Неверный промокод</p>}
         </div>
 
