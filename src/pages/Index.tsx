@@ -1615,6 +1615,7 @@ export default function Index() {
     setActivePanelServer(newServer);
     setPanelView("server");
     setPage("panel");
+    setBuyingPlan(null);
     pushAdminLog({ time: nowStr(), msg: `Сервер ${plan.id} активирован для ${user.email} (порт ${port})`, type: "info" });
   };
 
